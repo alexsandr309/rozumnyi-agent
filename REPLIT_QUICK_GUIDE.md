@@ -30,7 +30,7 @@
 
 1. Натисніть **"Create Token"** або **"Generate new token"**
 2. Заповніть:
-   - **Name**: `Trading Agent Auto Deploy`
+   - **Name**: `render-auto-setup`
    - **Scopes**: Виберіть мінімум:
      - ✅ `repls:read` - читання Repls
      - ✅ `repls:write` - створення/редагування Repls

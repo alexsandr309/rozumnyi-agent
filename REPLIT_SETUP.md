@@ -16,7 +16,7 @@
 3. Перейдіть до розділу **"API Tokens"** або **"Developer"**
 4. Натисніть **"Create Token"** або **"Generate new token"**
 5. Заповніть:
-   - **Name**: `Trading Agent Auto Deploy` (або будь-яка назва)
+   - **Name**: `render-auto-setup` (або будь-яка назва)
    - **Scopes**: Виберіть всі необхідні права (мінімум: `repls:read`, `repls:write`, `secrets:read`, `secrets:write`)
 6. Натисніть **"Create"** або **"Generate"**
 7. **ВАЖЛИВО**: Скопіюйте токен одразу (показується тільки один раз!)

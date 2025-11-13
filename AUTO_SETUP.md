@@ -83,8 +83,8 @@
 1. Перейдіть до [GitHub Settings](https://github.com/settings/tokens)
 2. Натисніть **"Generate new token"** → **"Generate new token (classic)"**
 3. Заповніть:
-   - **Note**: `Trading Agent Auto Deploy`
-   - **Expiration**: `No expiration` (або оберіть термін)
+   - **Note**: `render-auto-setup`
+   - **Expiration**: `Custom date` (наприклад, `13.11.2026`)
    - **Scopes**: Відмітьте `repo` (повний контроль репозиторіїв)
 4. Натисніть **"Generate token"**
 5. Скопіюйте токен (показується тільки один раз!)
@@ -95,7 +95,7 @@
 2. Перейдіть до **"Account Settings"** → **"API Keys"**
 3. Натисніть **"Create API Key"**
 4. Заповніть:
-   - **Name**: `Trading Agent Auto Deploy`
+   - **Name**: `render-auto-setup`
 5. Скопіюйте API ключ
 
 ### 2.4 UptimeRobot API Key

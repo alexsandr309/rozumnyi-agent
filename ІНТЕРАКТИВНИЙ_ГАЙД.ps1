@@ -63,8 +63,8 @@ Write-Host "  https://github.com/settings/tokens" -ForegroundColor White
 Write-Host ""
 Write-Host "Крок 2: Створіть токен:" -ForegroundColor Cyan
 Write-Host "  - Натисніть 'Generate new token' → 'Generate new token (classic)'" -ForegroundColor Gray
-Write-Host "  - Note: 'Trading Agent Auto Deploy'" -ForegroundColor Gray
-Write-Host "  - Expiration: 'No expiration'" -ForegroundColor Gray
+Write-Host "  - Note: 'render-auto-setup'" -ForegroundColor Gray
+Write-Host "  - Expiration: 'Custom date (наприклад, 13.11.2026)'" -ForegroundColor Gray
 Write-Host "  - Scopes: Відмітьте 'repo' (повний контроль)" -ForegroundColor Gray
 Write-Host "  - Натисніть 'Generate token'" -ForegroundColor Gray
 Write-Host ""
@@ -118,7 +118,7 @@ if ($platform -eq "render") {
     Write-Host ""
     Write-Host "Крок 2: Створіть API ключ:" -ForegroundColor Cyan
     Write-Host "  - Натисніть 'Create API Key'" -ForegroundColor Gray
-    Write-Host "  - Name: 'Trading Agent Auto Deploy'" -ForegroundColor Gray
+    Write-Host "  - Name: 'render-auto-setup'" -ForegroundColor Gray
     Write-Host "  - Натисніть 'Create'" -ForegroundColor Gray
     Write-Host ""
     Write-Host "Крок 3: Скопіюйте API ключ (показується тільки один раз!)" -ForegroundColor Cyan
@@ -147,7 +147,7 @@ if ($platform -eq "render") {
     Write-Host "  - Натисніть на профіль (аватар)" -ForegroundColor Gray
     Write-Host "  - Виберіть 'Account' → 'API Tokens'" -ForegroundColor Gray
     Write-Host "  - Натисніть 'Create Token'" -ForegroundColor Gray
-    Write-Host "  - Name: 'Trading Agent Auto Deploy'" -ForegroundColor Gray
+    Write-Host "  - Name: 'render-auto-setup'" -ForegroundColor Gray
     Write-Host "  - Scopes: repls:read, repls:write, secrets:read, secrets:write" -ForegroundColor Gray
     Write-Host "  - Натисніть 'Create'" -ForegroundColor Gray
     Write-Host ""
