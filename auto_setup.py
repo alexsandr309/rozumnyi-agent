@@ -155,10 +155,6 @@ def setup_git_repo(repo_url: str) -> bool:
             check=True,
             capture_output=True
         )
-        subprocess.run(
-            ["git", "push", "-u", "origin", "master"],
-            capture_output=True
-        )
         print_success("Код завантажено на GitHub")
         return True
         
