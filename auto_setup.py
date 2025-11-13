@@ -201,20 +201,44 @@ def create_render_service(config: Dict[str, Any], repo_url: str) -> Optional[str
         print_error("Render API key не знайдено в auto_config.json")
         return None
     
-    # Витягування owner та repo з URL
-    # https://github.com/username/repo -> username/repo
-    repo_path = repo_url.replace("https://github.com/", "")
-    
-    url = "https://api.render.com/v1/services"
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Accept": "application/json",
         "Content-Type": "application/json"
     }
     
+    # Отримання ownerId (потрібно для створення сервісу)
+    try:
+        me_resp = requests.get("https://api.render.com/v1/me", headers=headers, timeout=10)
+        if me_resp.status_code == 200:
+            me_data = me_resp.json()
+            owner_id = (
+                me_data.get("ownerId")
+                or me_data.get("owner", {}).get("id")
+                or me_data.get("id")
+            )
+            if not owner_id:
+                print_error("Не вдалося визначити ownerId з відповіді Render API")
+                print_warning(f"Відповідь: {me_data}")
+                return None
+        else:
+            print_error(f"Не вдалося отримати інформацію про користувача Render (статус {me_resp.status_code})")
+            print_warning(me_resp.text)
+            return None
+    except Exception as e:
+        print_error(f"Помилка отримання ownerId: {e}")
+        return None
+    
+    # Витягування owner та repo з URL
+    # https://github.com/username/repo -> username/repo
+    repo_path = repo_url.replace("https://github.com/", "")
+    
+    url = "https://api.render.com/v1/services"
+    
     data = {
         "type": "web_service",
         "name": "розумний-агент",
+        "ownerId": owner_id,
         "repo": repo_path,
         "branch": "main",
         "rootDir": "розумний агент",
