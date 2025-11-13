@@ -66,46 +66,51 @@ def check_service_account() -> bool:
     return True
 
 def create_github_repo(config: Dict[str, Any]) -> Optional[str]:
-    """Створення GitHub репозиторію"""
-    print_step("1", "Створення GitHub репозиторію...")
+    """Отримання URL існуючого GitHub репозиторію"""
+    print_step("1", "Перевірка GitHub репозиторію...")
     
     github_config = config.get("github", {})
     username = github_config.get("username")
     token = github_config.get("token")
-    repo_name = github_config.get("repo_name", "розумний-агент")
+    repo_name = github_config.get("repo_name", "rozumnyi-agent")
     
-    if not username or not token:
-        print_error("GitHub credentials не знайдено в auto_config.json")
+    if not username:
+        print_error("GitHub username не знайдено в auto_config.json")
         return None
     
-    url = f"https://api.github.com/user/repos"
-    headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json"
-    }
-    data = {
-        "name": repo_name,
-        "description": "Генеративний AI-Агент для торгівлі криптовалютою",
-        "private": False,
-        "auto_init": False
-    }
+    # Формуємо URL існуючого репозиторію
+    repo_url = f"https://github.com/{username}/{repo_name}"
     
-    try:
-        response = requests.post(url, headers=headers, json=data)
-        if response.status_code == 201:
-            repo_url = response.json()["html_url"]
-            print_success(f"Репозиторій створено: {repo_url}")
+    # Перевірка, чи репозиторій існує (опціонально, якщо є валідний токен)
+    if token:
+        try:
+            url = f"https://api.github.com/repos/{username}/{repo_name}"
+            headers = {
+                "Authorization": f"token {token}",
+                "Accept": "application/vnd.github.v3+json"
+            }
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                print_success(f"Репозиторій знайдено: {repo_url}")
+                return repo_url
+            elif response.status_code == 401:
+                print_warning("GitHub token недійсний, але репозиторій вже існує")
+                print_success(f"Використовую існуючий репозиторій: {repo_url}")
+                return repo_url
+            elif response.status_code == 404:
+                print_warning("Репозиторій не знайдено через API, але спробую використати URL")
+                return repo_url
+            else:
+                print_warning(f"Помилка перевірки репозиторію: {response.status_code}")
+                print_success(f"Використовую існуючий репозиторій: {repo_url}")
+                return repo_url
+        except Exception as e:
+            print_warning(f"Помилка перевірки через API: {e}")
+            print_success(f"Використовую існуючий репозиторій: {repo_url}")
             return repo_url
-        elif response.status_code == 422:
-            print_warning("Репозиторій вже існує, використовую існуючий")
-            return f"https://github.com/{username}/{repo_name}"
-        else:
-            print_error(f"Помилка створення репозиторію: {response.status_code}")
-            print(response.text)
-            return None
-    except Exception as e:
-        print_error(f"Помилка: {e}")
-        return None
+    else:
+        print_success(f"Використовую існуючий репозиторій: {repo_url}")
+        return repo_url
 
 def setup_git_repo(repo_url: str) -> bool:
     """Налаштування Git та завантаження коду"""
@@ -114,12 +119,12 @@ def setup_git_repo(repo_url: str) -> bool:
     try:
         # Перевірка, чи вже є git репозиторій
         if Path(".git").exists():
-            print_warning("Git репозиторій вже існує")
+            print_success("Git репозиторій вже існує")
         else:
             subprocess.run(["git", "init"], check=True, capture_output=True)
             print_success("Git репозиторій ініціалізовано")
         
-        # Додавання remote
+        # Додавання/оновлення remote
         subprocess.run(
             ["git", "remote", "remove", "origin"],
             capture_output=True
@@ -129,33 +134,48 @@ def setup_git_repo(repo_url: str) -> bool:
             check=True,
             capture_output=True
         )
-        print_success("Remote додано")
+        print_success("Remote налаштовано")
         
-        # Додавання файлів
-        subprocess.run(["git", "add", "."], check=True, capture_output=True)
+        # Перейменування поточної гілки на main (якщо потрібно)
+        try:
+            subprocess.run(
+                ["git", "branch", "-M", "main"],
+                check=True,
+                capture_output=True
+            )
+        except subprocess.CalledProcessError:
+            pass  # Гілка вже main
         
-        # Коміт
-        subprocess.run(
-            ["git", "commit", "-m", "Initial commit: Розумний Агент"],
-            check=True,
-            capture_output=True
+        # Перевірка, чи є незбережені зміни
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True,
+            text=True
         )
-        print_success("Зміни закомічено")
+        has_changes = bool(result.stdout.strip())
         
-        # Перейменування поточної гілки на main (для сумісності з GitHub)
-        subprocess.run(
-            ["git", "branch", "-M", "main"],
-            check=True,
-            capture_output=True
-        )
-
-        # Push
-        subprocess.run(
-            ["git", "push", "-u", "origin", "main"],
-            check=True,
-            capture_output=True
-        )
-        print_success("Код завантажено на GitHub")
+        if has_changes:
+            # Додавання файлів
+            subprocess.run(["git", "add", "."], check=True, capture_output=True)
+            
+            # Коміт
+            subprocess.run(
+                ["git", "commit", "-m", "Auto-update: prepare for Render deployment"],
+                check=True,
+                capture_output=True
+            )
+            print_success("Зміни закомічено")
+            
+            # Push
+            subprocess.run(
+                ["git", "push", "-u", "origin", "main"],
+                check=True,
+                capture_output=True
+            )
+            print_success("Код оновлено на GitHub")
+        else:
+            print_success("Немає нових змін, репозиторій вже синхронізовано")
+        
         return True
         
     except subprocess.CalledProcessError as e:
@@ -579,8 +599,8 @@ def main():
     print("Наступні кроки:")
     print("1. Перевірте Render Dashboard для перевірки деплою")
     print("2. Перевірте логи на Render")
-    print("3. Перевірте, що UptimeRobot монітор працює")
-    print("4. Перевірте Keep-Alive ендпоінт: curl https://your-app.onrender.com/")
+    print("3. Перевірте Keep-Alive ендпоінт: curl https://your-app.onrender.com/")
+    print("4. (Опціонально) Налаштуйте UptimeRobot монітор для Keep-Alive")
     print("\n⚠️  ВАЖЛИВО: Видаліть auto_config.json після налаштування!")
 
 if __name__ == "__main__":
