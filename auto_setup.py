@@ -167,12 +167,17 @@ def setup_git_repo(repo_url: str) -> bool:
             print_success("Зміни закомічено")
             
             # Push
-            subprocess.run(
-                ["git", "push", "-u", "origin", "main"],
-                check=True,
-                capture_output=True
-            )
-            print_success("Код оновлено на GitHub")
+            try:
+                subprocess.run(
+                    ["git", "push", "-u", "origin", "main"],
+                    check=True,
+                    capture_output=True
+                )
+                print_success("Код оновлено на GitHub")
+            except subprocess.CalledProcessError as push_err:
+                print_warning("Не вдалося виконати git push (можливо, недійсний токен або немає доступу)")
+                print_warning(str(push_err))
+                print_warning("Пропускаю push — переконайтесь вручну, що репозиторій синхронізовано")
         else:
             print_success("Немає нових змін, репозиторій вже синхронізовано")
         
