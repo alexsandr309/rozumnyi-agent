@@ -1,0 +1,22 @@
+# Render Blueprint для автоматичного розгортання
+services:
+  - type: web
+    name: розумний-агент
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: LOG_LEVEL
+        value: INFO
+      - key: TRADING_MODE
+        value: BALANCED
+      - key: POLL_INTERVAL_SECONDS
+        value: 60
+      - key: SAVE_MODEL_INTERVAL_STEPS
+        value: 30
+      - key: TRAIN_BATCH_SIZE
+        value: 32
+      # Додайте інші змінні через Render Dashboard або через Secret Files
+

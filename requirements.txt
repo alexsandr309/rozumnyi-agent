@@ -1,0 +1,25 @@
+# Flask та Gunicorn для веб-сервера
+Flask==3.0.3
+gunicorn==21.2.0
+
+# Торгівля через API бірж
+ccxt==4.3.75
+
+# Обробка даних
+pandas>=2.2.0
+numpy>=1.26.0
+
+# Machine Learning / Reinforcement Learning
+# TensorFlow 2.20.0 для Python 3.13, або 2.15.0 для Python 3.11
+tensorflow>=2.15.0
+
+# Google Drive API для хмарної пам'яті
+google-api-python-client==2.149.0
+google-auth==2.35.0
+google-auth-oauthlib==1.2.1
+google-auth-httplib2==0.2.0
+httplib2==0.22.0
+
+# Утиліти
+python-dotenv==1.0.1
+requests==2.31.0

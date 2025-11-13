@@ -1,0 +1,28 @@
+{
+  "platform": "render",
+  "binance": {
+    "testnet_api_key": "ваш_binance_testnet_api_key",
+    "testnet_secret_key": "ваш_binance_testnet_secret_key"
+  },
+  "github": {
+    "username": "ваш_github_username",
+    "token": "ваш_github_personal_access_token",
+    "repo_name": "розумний-агент"
+  },
+  "render": {
+    "api_key": "ваш_render_api_key"
+  },
+  "replit": {
+    "api_token": "ваш_replit_api_token",
+    "username": "ваш_replit_username",
+    "repl_name": "розумний-агент"
+  },
+  "uptimerobot": {
+    "api_key": "ваш_uptimerobot_api_key"
+  },
+  "trading": {
+    "mode": "BALANCED",
+    "deposit_usdt": 1000
+  }
+}
+

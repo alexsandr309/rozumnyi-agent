@@ -1,0 +1,29 @@
+========================================
+  ПРОСТІ КОМАНДИ - Просто Скопіюйте
+========================================
+
+Відкрийте PowerShell у папці "розумний агент" та виконайте:
+
+1. Перехід до папки:
+cd "I:\РОБОТЫ ТОРГОВЫЕ\БОТ 080325\archive\розумний агент"
+
+2. Встановлення залежностей (виправлена версія):
+python -m pip install --upgrade pip
+python -m pip install Flask==3.0.3 gunicorn==21.2.0 ccxt==4.3.75 pandas numpy tensorflow --upgrade
+python -m pip install google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2 httplib2 python-dotenv requests
+
+3. Перевірка встановлення:
+python -c "import flask, ccxt, pandas, numpy, tensorflow; print('Всі модулі встановлено!')"
+
+4. Запуск налаштування:
+python auto_setup.py
+
+========================================
+  АБО використайте .bat файл:
+========================================
+
+Просто подвійний клік на:
+ЗАПУСТИ_ВСЕ.bat
+
+========================================
+
