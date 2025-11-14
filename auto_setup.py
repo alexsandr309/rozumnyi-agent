@@ -1,6 +1,6 @@
 """
 Автоматичне налаштування проєкту "Розумний Агент"
-Виконує всі необхідні кроки для розгортання на Render або Replit
+Виконує всі необхідні кроки для розгортання на Railway, Render або Replit
 """
 
 import json
@@ -164,7 +164,7 @@ def setup_git_repo(repo_url: str) -> bool:
             
             # Коміт
             subprocess.run(
-                ["git", "commit", "-m", "Auto-update: prepare for Render deployment"],
+                ["git", "commit", "-m", "Auto-update: prepare for deployment"],
                 check=True,
                 capture_output=True
             )
@@ -538,6 +538,260 @@ def setup_replit_files(repl_id: str, config: Dict[str, Any]) -> bool:
     
     return True
 
+def execute_railway_graphql(query: str, variables: Optional[Dict] = None, api_key: str = "") -> Optional[Dict]:
+    """Виконання GraphQL запиту до Railway API"""
+    url = "https://backboard.railway.app/graphql/v2"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    payload = {"query": query}
+    if variables:
+        payload["variables"] = variables
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        print_error(f"Помилка GraphQL запиту: {e}")
+        return None
+
+def create_railway_project(config: Dict[str, Any]) -> Optional[str]:
+    """Створення Railway проекту"""
+    print_step("3", "Створення Railway проекту...")
+    
+    railway_config = config.get("railway", {})
+    api_key = railway_config.get("api_key")
+    
+    if not api_key:
+        print_error("Railway API key не знайдено в auto_config.json")
+        return None
+    
+    # Спочатку отримуємо список існуючих проектів
+    query = """
+    query {
+        projects {
+            edges {
+                node {
+                    id
+                    name
+                }
+            }
+        }
+    }
+    """
+    
+    result = execute_railway_graphql(query, None, api_key)
+    if not result:
+        return None
+    
+    # Перевіряємо, чи вже є проект з такою назвою
+    project_name = railway_config.get("project_name", "розумний-агент")
+    projects = result.get("data", {}).get("projects", {}).get("edges", [])
+    
+    for edge in projects:
+        if edge.get("node", {}).get("name") == project_name:
+            project_id = edge["node"]["id"]
+            print_success(f"Використовую існуючий проект: {project_name} ({project_id})")
+            return project_id
+    
+    # Створюємо новий проект
+    mutation = """
+    mutation($input: ProjectCreateInput!) {
+        projectCreate(input: $input) {
+            project {
+                id
+                name
+            }
+        }
+    }
+    """
+    
+    variables = {
+        "input": {
+            "name": project_name
+        }
+    }
+    
+    result = execute_railway_graphql(mutation, variables, api_key)
+    if not result or "errors" in result:
+        if result and "errors" in result:
+            print_error(f"Помилка створення проекту: {result['errors']}")
+        return None
+    
+    project_data = result.get("data", {}).get("projectCreate", {}).get("project")
+    if project_data:
+        project_id = project_data.get("id")
+        print_success(f"Railway проект створено: {project_name} ({project_id})")
+        return project_id
+    
+    return None
+
+def create_railway_service(config: Dict[str, Any], project_id: str, repo_url: str) -> Optional[str]:
+    """Створення Railway сервісу з GitHub репозиторію"""
+    print_step("4", "Створення Railway сервісу...")
+    
+    railway_config = config.get("railway", {})
+    api_key = railway_config.get("api_key")
+    
+    # Витягуємо owner/repo з URL: https://github.com/username/repo -> username/repo
+    repo_path = repo_url.replace("https://github.com/", "").replace(".git", "")
+    
+    mutation = """
+    mutation($input: ServiceCreateInput!) {
+        serviceCreate(input: $input) {
+            service {
+                id
+                name
+            }
+        }
+    }
+    """
+    
+    variables = {
+        "input": {
+            "projectId": project_id,
+            "source": {
+                "repo": repo_path,
+                "branch": railway_config.get("branch", "main"),
+                "rootDirectory": railway_config.get("root_dir", "розумний агент")
+            }
+        }
+    }
+    
+    result = execute_railway_graphql(mutation, variables, api_key)
+    if not result or "errors" in result:
+        if result and "errors" in result:
+            print_error(f"Помилка створення сервісу: {result['errors']}")
+        return None
+    
+    service_data = result.get("data", {}).get("serviceCreate", {}).get("service")
+    if service_data:
+        service_id = service_data.get("id")
+        service_name = service_data.get("name", "розумний-агент")
+        print_success(f"Railway сервіс створено: {service_name} ({service_id})")
+        return service_id
+    
+    return None
+
+def setup_railway_env_vars(service_id: str, config: Dict[str, Any]) -> bool:
+    """Налаштування Environment Variables на Railway"""
+    print_step("5", "Налаштування Environment Variables...")
+    
+    railway_config = config.get("railway", {})
+    api_key = railway_config.get("api_key")
+    binance_config = config.get("binance", {})
+    trading_config = config.get("trading", {})
+    
+    env_vars = {
+        "BINANCE_TESTNET_API_KEY": binance_config.get("testnet_api_key", ""),
+        "BINANCE_TESTNET_SECRET_KEY": binance_config.get("testnet_secret_key", ""),
+        "TRADING_MODE": trading_config.get("mode", "BALANCED"),
+        "DEPOSIT_USDT": str(trading_config.get("deposit_usdt", 1000)),
+        "MODEL_FILE_NAME": "agent_model.keras",
+        "CLIENT_SECRETS_FILE": "service_account.json",
+        "GOOGLE_TOKEN_FILE": "token.json",
+        "POLL_INTERVAL_SECONDS": "60",
+        "SAVE_MODEL_INTERVAL_STEPS": "100",
+        "TRAIN_BATCH_SIZE": "64",
+        "LOG_LEVEL": "INFO",
+    }
+    
+    # Railway використовує variableCollectionUpsert для встановлення env vars
+    mutation = """
+    mutation($input: VariableCollectionUpsertInput!) {
+        variableCollectionUpsert(input: $input) {
+            variableCollection {
+                id
+            }
+        }
+    }
+    """
+    
+    variables = {
+        "input": {
+            "serviceId": service_id,
+            "variables": [{"key": k, "value": v} for k, v in env_vars.items()]
+        }
+    }
+    
+    result = execute_railway_graphql(mutation, variables, api_key)
+    if result and "errors" not in result:
+        print_success("Environment Variables встановлено")
+        return True
+    else:
+        if result and "errors" in result:
+            print_warning(f"Помилка встановлення env vars: {result['errors']}")
+        # Спробуємо встановити по одній
+        for key, value in env_vars.items():
+            single_mutation = """
+            mutation($input: VariableUpsertInput!) {
+                variableUpsert(input: $input) {
+                    variable {
+                        id
+                    }
+                }
+            }
+            """
+            single_vars = {
+                "input": {
+                    "serviceId": service_id,
+                    "key": key,
+                    "value": value
+                }
+            }
+            single_result = execute_railway_graphql(single_mutation, single_vars, api_key)
+            if single_result and "errors" not in single_result:
+                print_success(f"Додано: {key}")
+            else:
+                print_warning(f"Не вдалося додати {key}")
+        return True
+
+def upload_railway_secret_file(service_id: str, config: Dict[str, Any]) -> bool:
+    """Завантаження service_account.json як секрету на Railway"""
+    print_step("6", "Завантаження Secret Files...")
+    
+    railway_config = config.get("railway", {})
+    api_key = railway_config.get("api_key")
+    
+    sa_path = Path("service_account.json")
+    if not sa_path.exists():
+        print_error("service_account.json не знайдено!")
+        return False
+    
+    # Читаємо вміст файлу
+    with open(sa_path, 'r', encoding='utf-8') as f:
+        sa_content = f.read()
+    
+    # Railway використовує variableUpsert для секретів
+    mutation = """
+    mutation($input: VariableUpsertInput!) {
+        variableUpsert(input: $input) {
+            variable {
+                id
+            }
+        }
+    }
+    """
+    
+    variables = {
+        "input": {
+            "serviceId": service_id,
+            "key": "SERVICE_ACCOUNT_JSON",
+            "value": sa_content
+        }
+    }
+    
+    result = execute_railway_graphql(mutation, variables, api_key)
+    if result and "errors" not in result:
+        print_success("service_account.json завантажено як секрет")
+        return True
+    else:
+        print_warning("Не вдалося завантажити service_account.json через API")
+        print_info("Завантажте файл вручну через Railway Dashboard -> Variables -> Add Secret File")
+        return False
+
 def create_uptimerobot_monitor(config: Dict[str, Any], service_url: str) -> bool:
     """Створення UptimeRobot монітора"""
     print_step("6", "Створення UptimeRobot монітора...")
@@ -606,8 +860,8 @@ def main():
         print_error("Не вдалося налаштувати Git")
         sys.exit(1)
     
-    # Вибір платформи: Render або Replit
-    platform = config.get("platform", "render").lower()
+    # Вибір платформи: Railway, Render або Replit
+    platform = config.get("platform", "railway").lower()
     
     if platform == "replit":
         # Крок 3a: Replit Repl
@@ -624,6 +878,36 @@ def main():
             
             print_success("Replit налаштування завершено!")
             print(f"Перевірте ваш Repl: https://replit.com/@{config.get('replit', {}).get('username', '')}/розумний-агент")
+    elif platform == "railway":
+        # Крок 3: Railway проект
+        project_id = create_railway_project(config)
+        if not project_id:
+            print_error("Не вдалося створити Railway проект")
+            print("Можливо, потрібно створити вручну через Railway Dashboard")
+            sys.exit(1)
+        
+        # Крок 4: Railway сервіс
+        service_id = create_railway_service(config, project_id, repo_url)
+        if not service_id:
+            print_error("Не вдалося створити Railway сервіс")
+            print("Можливо, потрібно створити вручну через Railway Dashboard")
+            sys.exit(1)
+        
+        # Очікування створення сервісу
+        print_warning("Очікую створення сервісу на Railway (10 секунд)...")
+        time.sleep(10)
+        
+        # Крок 5: Environment Variables
+        if not setup_railway_env_vars(service_id, config):
+            print_warning("Не всі Environment Variables встановлено")
+        
+        # Крок 6: Secret Files
+        if not upload_railway_secret_file(service_id, config):
+            print_warning("Не вдалося завантажити Secret Files")
+            print("Завантажте service_account.json вручну через Railway Dashboard -> Variables")
+        
+        print_success("Railway налаштування завершено!")
+        print(f"Перевірте ваш проект: https://railway.app/project/{project_id}")
     else:
         # Крок 3: Render сервіс
         service_id = create_render_service(config, repo_url)
@@ -669,10 +953,19 @@ def main():
     print(f"{Colors.BOLD}{Colors.GREEN}{'='*60}{Colors.END}\n")
     
     print("Наступні кроки:")
-    print("1. Перевірте Render Dashboard для перевірки деплою")
-    print("2. Перевірте логи на Render")
-    print("3. Перевірте Keep-Alive ендпоінт: curl https://your-app.onrender.com/")
-    print("4. (Опціонально) Налаштуйте UptimeRobot монітор для Keep-Alive")
+    if platform == "railway":
+        print("1. Перевірте Railway Dashboard для перевірки деплою")
+        print("2. Перевірте логи на Railway")
+        print("3. Перевірте Keep-Alive ендпоінт: curl https://your-app.railway.app/")
+        print("4. (Опціонально) Налаштуйте UptimeRobot монітор для Keep-Alive")
+    elif platform == "replit":
+        print("1. Перевірте Replit Dashboard для перевірки деплою")
+        print("2. Перевірте логи на Replit")
+    else:
+        print("1. Перевірте Render Dashboard для перевірки деплою")
+        print("2. Перевірте логи на Render")
+        print("3. Перевірте Keep-Alive ендпоінт: curl https://your-app.onrender.com/")
+        print("4. (Опціонально) Налаштуйте UptimeRobot монітор для Keep-Alive")
     print("\n⚠️  ВАЖЛИВО: Видаліть auto_config.json після налаштування!")
 
 if __name__ == "__main__":
