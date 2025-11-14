@@ -263,17 +263,32 @@ def create_render_service(config: Dict[str, Any], repo_url: str) -> Optional[str
     
     url = "https://api.render.com/v1/services"
     
+    service_name = render_config.get("service_name", "розумний-агент")
+    branch = render_config.get("branch", "main")
+    root_dir = render_config.get("root_dir", "розумний агент")
+    build_command = render_config.get("build_command", "pip install -r requirements.txt")
+    start_command = render_config.get("start_command", "gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120")
+    plan = render_config.get("plan", "free")
+    region = render_config.get("region", "oregon")
+    python_version = render_config.get("python_version", "3.11")
+    
     data = {
         "type": "web_service",
-        "name": "розумний-агент",
+        "name": service_name,
         "ownerId": owner_id,
         "repo": repo_path,
-        "branch": "main",
-        "rootDir": "розумний агент",
-        "runtime": "python",
-        "buildCommand": "pip install -r requirements.txt",
-        "startCommand": "gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120",
-        "planId": "free",
+        "branch": branch,
+        "rootDir": root_dir,
+        "buildCommand": build_command,
+        "startCommand": start_command,
+        "serviceDetails": {
+            "plan": plan,
+            "region": region,
+            "env": "python",
+            "envSpecificDetails": {
+                "pythonVersion": python_version
+            }
+        },
         "envVars": []
     }
     
