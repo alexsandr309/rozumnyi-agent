@@ -43,6 +43,10 @@ def print_warning(message: str):
     """Виведення попередження"""
     print(f"{Colors.YELLOW}⚠{Colors.END} {message}")
 
+def print_info(message: str):
+    """Виведення інформаційного повідомлення"""
+    print(f"{Colors.BLUE}ℹ{Colors.END} {message}")
+
 def load_config() -> Dict[str, Any]:
     """Завантаження конфігурації"""
     config_path = Path("auto_config.json")
@@ -208,26 +212,50 @@ def create_render_service(config: Dict[str, Any], repo_url: str) -> Optional[str
     }
     
     # Отримання ownerId (потрібно для створення сервісу)
-    try:
-        me_resp = requests.get("https://api.render.com/v1/me", headers=headers, timeout=10)
-        if me_resp.status_code == 200:
-            me_data = me_resp.json()
-            owner_id = (
-                me_data.get("ownerId")
-                or me_data.get("owner", {}).get("id")
-                or me_data.get("id")
-            )
+    owner_id = render_config.get("owner_id")  # Можна вказати вручну в auto_config.json
+    
+    if not owner_id:
+        # Спробувати отримати автоматично
+        print_warning("ownerId не вказано в конфігурації, спробую отримати автоматично...")
+        try:
+            # Спробувати різні endpoints
+            endpoints = [
+                "https://api.render.com/v1/owners",
+                "https://api.render.com/v1/user",
+                "https://api.render.com/v1/me"
+            ]
+            
+            for endpoint in endpoints:
+                try:
+                    resp = requests.get(endpoint, headers=headers, timeout=10)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        # Різні можливі структури відповіді
+                        if isinstance(data, list) and data:
+                            owner_id = data[0].get("id") or data[0].get("ownerId")
+                        elif isinstance(data, dict):
+                            owner_id = data.get("id") or data.get("ownerId") or data.get("user", {}).get("id")
+                        if owner_id:
+                            print_success(f"ownerId отримано: {owner_id}")
+                            break
+                except:
+                    continue
+            
             if not owner_id:
-                print_error("Не вдалося визначити ownerId з відповіді Render API")
-                print_warning(f"Відповідь: {me_data}")
+                print_error("Не вдалося автоматично отримати ownerId")
+                print_warning("Додайте 'owner_id' в секцію 'render' в auto_config.json")
+                print_warning("Або створіть сервіс вручну через Render Dashboard")
+                print_info("Щоб знайти ownerId:")
+                print_info("1. Відкрийте Render Dashboard")
+                print_info("2. Перейдіть в Settings -> API")
+                print_info("3. Або подивіться URL вашого профілю")
                 return None
-        else:
-            print_error(f"Не вдалося отримати інформацію про користувача Render (статус {me_resp.status_code})")
-            print_warning(me_resp.text)
+        except Exception as e:
+            print_error(f"Помилка отримання ownerId: {e}")
+            print_warning("Додайте 'owner_id' вручну в auto_config.json")
             return None
-    except Exception as e:
-        print_error(f"Помилка отримання ownerId: {e}")
-        return None
+    else:
+        print_success(f"Використовую ownerId з конфігурації: {owner_id}")
     
     # Витягування owner та repo з URL
     # https://github.com/username/repo -> username/repo
