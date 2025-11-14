@@ -17,9 +17,25 @@ import ccxt
 import numpy as np
 import pandas as pd
 
-# Оптимізація TensorFlow для обмежених ресурсів (Render Free Tier)
+# Оптимізація TensorFlow для обмежених ресурсів (Render Free Tier, Railway)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Приховати warnings
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # Вимкнути GPU, використовувати тільки CPU
 import tensorflow as tf
+
+# Вимкнути GPU та використовувати тільки CPU
+try:
+    # Спроба вимкнути GPU (якщо доступні)
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if gpus:
+        try:
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+        except RuntimeError:
+            pass
+    # Вимкнути всі GPU пристрої
+    tf.config.set_visible_devices([], 'GPU')
+except Exception:
+    pass  # Ігноруємо помилки - CPU буде використано автоматично
 
 # Обмежити використання пам'яті та потоків TensorFlow
 tf.config.threading.set_inter_op_parallelism_threads(1)
@@ -173,6 +189,18 @@ class CloudModelManager:
 
     def _get_credentials(self) -> Credentials:
         """Отримання credentials: спочатку Service Account, потім OAuth"""
+        # Створити service_account.json зі змінної середовища, якщо файл не існує
+        service_account_file = Path(self.service_account_path)
+        if not service_account_file.exists():
+            service_account_json = os.getenv("SERVICE_ACCOUNT_JSON")
+            if service_account_json:
+                try:
+                    service_account_file.parent.mkdir(parents=True, exist_ok=True)
+                    service_account_file.write_text(service_account_json, encoding='utf-8')
+                    logger.info("Створено service_account.json зі змінної середовища")
+                except Exception as exc:
+                    logger.warning("Не вдалося створити service_account.json: %s", exc)
+        
         # Спробувати Service Account (для автоматичної роботи)
         if Path(self.service_account_path).exists():
             try:
