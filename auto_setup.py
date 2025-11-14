@@ -835,55 +835,68 @@ def setup_railway_env_vars(service_id: str, config: Dict[str, Any]) -> bool:
         "LOG_LEVEL": "INFO",
     }
     
-    # Railway використовує variableCollectionUpsert для встановлення env vars
-    mutation = """
-    mutation($input: VariableCollectionUpsertInput!) {
-        variableCollectionUpsert(input: $input) {
-            variableCollection {
+    # Спробуємо встановити змінні по одній
+    success_count = 0
+    for key, value in env_vars.items():
+        # Варіант 1: Прямий формат
+        mutation1 = """
+        mutation($serviceId: String!, $key: String!, $value: String!) {
+            variableUpsert(input: { serviceId: $serviceId, key: $key, value: $value }) {
                 id
             }
         }
-    }
-    """
-    
-    variables = {
-        "input": {
+        """
+        vars1 = {
             "serviceId": service_id,
-            "variables": [{"key": k, "value": v} for k, v in env_vars.items()]
+            "key": key,
+            "value": value
         }
-    }
+        
+        result = execute_railway_graphql(mutation1, vars1, api_key)
+        if result and "errors" not in result:
+            success_count += 1
+            print_success(f"Додано: {key}")
+            continue
+        
+        # Варіант 2: Через input об'єкт
+        mutation2 = """
+        mutation($input: VariableUpsertInput!) {
+            variableUpsert(input: $input) {
+                id
+            }
+        }
+        """
+        vars2 = {
+            "input": {
+                "serviceId": service_id,
+                "key": key,
+                "value": value
+            }
+        }
+        
+        result = execute_railway_graphql(mutation2, vars2, api_key)
+        if result and "errors" not in result:
+            success_count += 1
+            print_success(f"Додано: {key}")
+        else:
+            print_warning(f"Не вдалося додати {key}")
     
-    result = execute_railway_graphql(mutation, variables, api_key)
-    if result and "errors" not in result:
-        print_success("Environment Variables встановлено")
+    if success_count > 0:
+        print_success(f"Встановлено {success_count} з {len(env_vars)} змінних середовища")
+        if success_count < len(env_vars):
+            print_info("Деякі змінні не вдалося встановити автоматично. Встановіть їх вручну через Railway Dashboard")
         return True
     else:
-        if result and "errors" in result:
-            print_warning(f"Помилка встановлення env vars: {result['errors']}")
-        # Спробуємо встановити по одній
+        print_warning("Не вдалося встановити змінні середовища через API")
+        print_info("Встановіть їх вручну через Railway Dashboard -> Variables")
+        print_info("Потрібні змінні:")
         for key, value in env_vars.items():
-            single_mutation = """
-            mutation($input: VariableUpsertInput!) {
-                variableUpsert(input: $input) {
-                    variable {
-                        id
-                    }
-                }
-            }
-            """
-            single_vars = {
-                "input": {
-                    "serviceId": service_id,
-                    "key": key,
-                    "value": value
-                }
-            }
-            single_result = execute_railway_graphql(single_mutation, single_vars, api_key)
-            if single_result and "errors" not in single_result:
-                print_success(f"Додано: {key}")
+            # Не показуємо секрети повністю
+            if "SECRET" in key or "KEY" in key:
+                print_info(f"  {key} = <значення з auto_config.json>")
             else:
-                print_warning(f"Не вдалося додати {key}")
-        return True
+                print_info(f"  {key} = {value}")
+        return False
 
 def upload_railway_secret_file(service_id: str, config: Dict[str, Any]) -> bool:
     """Завантаження service_account.json як секрету на Railway"""
