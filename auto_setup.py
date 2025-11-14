@@ -569,7 +569,10 @@ def execute_railway_graphql(query: str, variables: Optional[Dict] = None, api_ke
             if response.status_code == 200:
                 # Перевіряємо наявність помилок у відповіді
                 if result and "errors" in result:
-                    print_error(f"GraphQL помилки: {result['errors']}")
+                    # Не виводимо помилку для "Not Authorized" - це нормально для деяких запитів
+                    errors = result.get("errors", [])
+                    if not any("Not Authorized" in str(e) for e in errors):
+                        print_error(f"GraphQL помилки: {errors}")
                     return result  # Повертаємо для обробки помилок
                 return result
             
@@ -630,15 +633,24 @@ def create_railway_project(config: Dict[str, Any]) -> Optional[str]:
     """
     
     result = execute_railway_graphql(query, None, api_key)
-    if result:
+    if result and "errors" not in result:
         # Перевіряємо, чи вже є проект з такою назвою
-        projects = result.get("data", {}).get("me", {}).get("projects", {}).get("edges", [])
-        
-        for edge in projects:
-            if edge.get("node", {}).get("name") == project_name:
-                project_id = edge["node"]["id"]
-                print_success(f"Використовую існуючий проект: {project_name} ({project_id})")
-                return project_id
+        data = result.get("data")
+        if data:
+            me_data = data.get("me")
+            if me_data:
+                projects = me_data.get("projects", {}).get("edges", [])
+                
+                for edge in projects:
+                    if edge.get("node", {}).get("name") == project_name:
+                        project_id = edge["node"]["id"]
+                        print_success(f"Використовую існуючий проект: {project_name} ({project_id})")
+                        return project_id
+    elif result and "errors" in result:
+        # Якщо є помилка авторизації для me, просто продовжуємо створення
+        errors = result.get("errors", [])
+        if any("Not Authorized" in str(e) for e in errors):
+            print_info("Не вдалося перевірити існуючі проекти (Not Authorized), створюємо новий...")
     
     # Створюємо новий проект
     # Railway може потребувати workspace ID, спробуємо без нього спочатку
