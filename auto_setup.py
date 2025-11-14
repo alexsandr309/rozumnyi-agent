@@ -540,7 +540,11 @@ def setup_replit_files(repl_id: str, config: Dict[str, Any]) -> bool:
 
 def execute_railway_graphql(query: str, variables: Optional[Dict] = None, api_key: str = "") -> Optional[Dict]:
     """Виконання GraphQL запиту до Railway API"""
-    url = "https://backboard.railway.app/graphql/v2"
+    # Спробуємо обидва endpoint'и
+    urls = [
+        "https://backboard.railway.com/graphql/v2",
+        "https://backboard.railway.app/graphql/v2"
+    ]
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
@@ -549,13 +553,52 @@ def execute_railway_graphql(query: str, variables: Optional[Dict] = None, api_ke
     if variables:
         payload["variables"] = variables
     
-    try:
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        print_error(f"Помилка GraphQL запиту: {e}")
-        return None
+    # Спробуємо обидва endpoint'и
+    last_error = None
+    for url in urls:
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+        
+            # Спробуємо отримати JSON навіть якщо статус не 200
+            try:
+                result = response.json()
+            except:
+                result = None
+            
+            # Якщо успішно, повертаємо результат
+            if response.status_code == 200:
+                # Перевіряємо наявність помилок у відповіді
+                if result and "errors" in result:
+                    print_error(f"GraphQL помилки: {result['errors']}")
+                    return result  # Повертаємо для обробки помилок
+                return result
+            
+            # Якщо помилка, зберігаємо для останньої спроби
+            error_msg = f"{response.status_code} {response.reason}"
+            if result and "errors" in result:
+                error_msg += f": {result['errors']}"
+            elif result:
+                error_msg += f": {result}"
+            last_error = error_msg
+            
+            # Якщо це останній URL, виводимо помилку
+            if url == urls[-1]:
+                print_error(f"Помилка GraphQL запиту: {last_error}")
+                if result:
+                    return result  # Повертаємо результат навіть з помилками для аналізу
+                return None
+        except requests.exceptions.RequestException as e:
+            last_error = str(e)
+            if url == urls[-1]:
+                print_error(f"Помилка мережевого запиту: {last_error}")
+                return None
+        except Exception as e:
+            last_error = str(e)
+            if url == urls[-1]:
+                print_error(f"Неочікувана помилка: {last_error}")
+                return None
+    
+    return None
 
 def create_railway_project(config: Dict[str, Any]) -> Optional[str]:
     """Створення Railway проекту"""
@@ -568,14 +611,18 @@ def create_railway_project(config: Dict[str, Any]) -> Optional[str]:
         print_error("Railway API key не знайдено в auto_config.json")
         return None
     
-    # Спочатку отримуємо список існуючих проектів
+    project_name = railway_config.get("project_name", "розумний-агент")
+    
+    # Спочатку отримуємо список існуючих проектів через me
     query = """
     query {
-        projects {
-            edges {
-                node {
-                    id
-                    name
+        me {
+            projects {
+                edges {
+                    node {
+                        id
+                        name
+                    }
                 }
             }
         }
@@ -583,49 +630,53 @@ def create_railway_project(config: Dict[str, Any]) -> Optional[str]:
     """
     
     result = execute_railway_graphql(query, None, api_key)
-    if not result:
-        return None
-    
-    # Перевіряємо, чи вже є проект з такою назвою
-    project_name = railway_config.get("project_name", "розумний-агент")
-    projects = result.get("data", {}).get("projects", {}).get("edges", [])
-    
-    for edge in projects:
-        if edge.get("node", {}).get("name") == project_name:
-            project_id = edge["node"]["id"]
-            print_success(f"Використовую існуючий проект: {project_name} ({project_id})")
-            return project_id
+    if result:
+        # Перевіряємо, чи вже є проект з такою назвою
+        projects = result.get("data", {}).get("me", {}).get("projects", {}).get("edges", [])
+        
+        for edge in projects:
+            if edge.get("node", {}).get("name") == project_name:
+                project_id = edge["node"]["id"]
+                print_success(f"Використовую існуючий проект: {project_name} ({project_id})")
+                return project_id
     
     # Створюємо новий проект
+    # Railway може потребувати workspace ID, спробуємо без нього спочатку
     mutation = """
-    mutation($input: ProjectCreateInput!) {
-        projectCreate(input: $input) {
-            project {
-                id
-                name
-            }
+    mutation($name: String!) {
+        projectCreate(input: { name: $name }) {
+            id
+            name
         }
     }
     """
     
     variables = {
-        "input": {
-            "name": project_name
-        }
+        "name": project_name
     }
     
     result = execute_railway_graphql(mutation, variables, api_key)
-    if not result or "errors" in result:
-        if result and "errors" in result:
-            print_error(f"Помилка створення проекту: {result['errors']}")
+    if not result:
+        print_error("Не вдалося виконати запит до Railway API")
         return None
     
-    project_data = result.get("data", {}).get("projectCreate", {}).get("project")
+    if "errors" in result:
+        error_msg = result.get("errors", [])
+        print_error(f"Помилка створення проекту: {error_msg}")
+        # Виводимо детальну інформацію для дебагу
+        if isinstance(error_msg, list) and len(error_msg) > 0:
+            print_info(f"Деталі помилки: {error_msg[0]}")
+        return None
+    
+    project_data = result.get("data", {}).get("projectCreate")
     if project_data:
         project_id = project_data.get("id")
         print_success(f"Railway проект створено: {project_name} ({project_id})")
         return project_id
     
+    print_error("Неочікувана відповідь від Railway API")
+    if result:
+        print_info(f"Відповідь API: {result}")
     return None
 
 def create_railway_service(config: Dict[str, Any], project_id: str, repo_url: str) -> Optional[str]:
