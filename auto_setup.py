@@ -700,42 +700,116 @@ def create_railway_service(config: Dict[str, Any], project_id: str, repo_url: st
     
     # Витягуємо owner/repo з URL: https://github.com/username/repo -> username/repo
     repo_path = repo_url.replace("https://github.com/", "").replace(".git", "")
+    branch = railway_config.get("branch", "main")
+    # root_dir не встановлюємо за замовчуванням - спробуємо без нього спочатку
+    root_dir = railway_config.get("root_dir", "")  # Якщо не вказано, спробуємо без rootDirectory
     
-    mutation = """
-    mutation($input: ServiceCreateInput!) {
-        serviceCreate(input: $input) {
-            service {
+    # Спробуємо кілька варіантів мутації
+    mutations = []
+    
+    # Варіант 1: Тільки repo (найпростіший)
+    mutations.append({
+        "name": "тільки repo",
+        "mutation": """
+        mutation($projectId: String!, $repo: String!) {
+            serviceCreate(input: { projectId: $projectId, source: { repo: $repo } }) {
                 id
                 name
             }
         }
-    }
-    """
-    
-    variables = {
-        "input": {
+        """,
+        "variables": {
             "projectId": project_id,
-            "source": {
-                "repo": repo_path,
-                "branch": railway_config.get("branch", "main"),
-                "rootDirectory": railway_config.get("root_dir", "розумний агент")
-            }
+            "repo": repo_path
         }
-    }
+    })
     
-    result = execute_railway_graphql(mutation, variables, api_key)
-    if not result or "errors" in result:
-        if result and "errors" in result:
-            print_error(f"Помилка створення сервісу: {result['errors']}")
-        return None
+    # Варіант 2: repo + branch
+    if branch:
+        mutations.append({
+            "name": "repo + branch",
+            "mutation": """
+            mutation($projectId: String!, $repo: String!, $branch: String!) {
+                serviceCreate(input: { 
+                    projectId: $projectId, 
+                    source: { repo: $repo, branch: $branch } 
+                }) {
+                    id
+                    name
+                }
+            }
+            """,
+            "variables": {
+                "projectId": project_id,
+                "repo": repo_path,
+                "branch": branch
+            }
+        })
     
-    service_data = result.get("data", {}).get("serviceCreate", {}).get("service")
-    if service_data:
-        service_id = service_data.get("id")
-        service_name = service_data.get("name", "розумний-агент")
-        print_success(f"Railway сервіс створено: {service_name} ({service_id})")
-        return service_id
+    # Варіант 3: repo + branch + rootDirectory (якщо вказано)
+    if root_dir:
+        mutations.append({
+            "name": "repo + branch + rootDirectory",
+            "mutation": """
+            mutation($projectId: String!, $repo: String!, $branch: String!, $rootDir: String!) {
+                serviceCreate(input: { 
+                    projectId: $projectId, 
+                    source: { repo: $repo, branch: $branch, rootDirectory: $rootDir } 
+                }) {
+                    id
+                    name
+                }
+            }
+            """,
+            "variables": {
+                "projectId": project_id,
+                "repo": repo_path,
+                "branch": branch,
+                "rootDir": root_dir
+            }
+        })
     
+    # Спробуємо кожен варіант
+    for variant in mutations:
+        print_info(f"Спроба створення сервісу: {variant['name']}...")
+        result = execute_railway_graphql(variant["mutation"], variant["variables"], api_key)
+        
+        if not result:
+            continue
+        
+        if "errors" in result:
+            errors = result.get("errors", [])
+            # Якщо це не останній варіант, просто продовжуємо
+            is_last = (variant == mutations[-1])
+            if not is_last:
+                print_info(f"Варіант '{variant['name']}' не спрацював, спробуємо інший...")
+                continue
+            else:
+                print_error(f"Помилка створення сервісу: {errors}")
+                # Виводимо деталі для дебагу
+                if isinstance(errors, list) and len(errors) > 0:
+                    error_msg = errors[0].get("message", str(errors[0])) if isinstance(errors[0], dict) else str(errors[0])
+                    print_info(f"Деталі помилки: {error_msg}")
+                return None
+        
+        # Перевіряємо структуру відповіді
+        service_data = result.get("data", {}).get("serviceCreate")
+        if service_data:
+            # Може бути безпосередньо id та name, або в об'єкті service
+            if isinstance(service_data, dict):
+                service_id = service_data.get("id") or service_data.get("service", {}).get("id")
+                service_name = service_data.get("name") or service_data.get("service", {}).get("name", "розумний-агент")
+            else:
+                # Якщо service_data - це вже id
+                service_id = service_data
+                service_name = "розумний-агент"
+            
+            if service_id:
+                print_success(f"Railway сервіс створено: {service_name} ({service_id})")
+                return service_id
+    
+    print_error("Не вдалося створити сервіс жодним з варіантів")
+    print_info("Можливо, потрібно спочатку підключити GitHub до Railway акаунту")
     return None
 
 def setup_railway_env_vars(service_id: str, config: Dict[str, Any]) -> bool:
