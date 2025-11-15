@@ -3,8 +3,12 @@
 Розгортається на Render з хмарною пам'яттю через Google Drive
 """
 
-import logging
+# КРИТИЧНО: Встановити CUDA_VISIBLE_DEVICES ДО будь-яких імпортів TensorFlow
 import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # Вимкнути GPU, використовувати тільки CPU
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Приховати warnings
+
+import logging
 import threading
 import time
 from dataclasses import dataclass
@@ -18,8 +22,7 @@ import numpy as np
 import pandas as pd
 
 # Оптимізація TensorFlow для обмежених ресурсів (Render Free Tier, Railway)
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Приховати warnings
-os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # Вимкнути GPU, використовувати тільки CPU
+# CUDA_VISIBLE_DEVICES вже встановлено на початку файлу
 import tensorflow as tf
 
 # Вимкнути GPU та використовувати тільки CPU
